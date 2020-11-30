@@ -1,0 +1,25 @@
+FROM alpine
+
+RUN apk update \
+    && apk add skopeo aws-cli jq
+
+WORKDIR /drh
+
+ENV IMAGE alpine
+ENV TAG latest
+ENV SOURCE_TYPE Amazon_ECR
+ENV AWS_DEFAULT_REGION us-west-2
+ENV AWS_ACCOUNT_ID 111111111111
+
+ENV SRC_REGION us-west-2
+ENV SRC_ACCOUNT_ID 987654321098
+ENV SRC_CREDENTIAL src
+
+ENV DEST_REGION cn-north-1
+ENV DEST_ACCOUNT_ID 123456789012
+ENV DEST_PREFIX ''
+ENV DEST_CREDENTIAL dest
+
+COPY copy.sh .
+RUN chmod +x copy.sh
+CMD ["sh", "copy.sh"]

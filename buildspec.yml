@@ -1,0 +1,23 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 10
+  pre_build:
+    commands:
+      - echo "Installing dependencies and executing unit tests - `pwd`"
+      - cd source
+      - chmod +x ./run-all-tests.sh && ./run-all-tests.sh
+      - echo "Installing dependencies and executing unit tests completed `date`"
+  build:
+    commands:
+      - cd ../deployment
+      - VERSION=$(git describe --tags --exact-match || git describe --tags || echo edge)
+      - echo $VERSION
+      - ./build-s3-dist.sh $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
+
+artifacts:
+  files:
+    - deployment/**/*
+    - .git/**/*

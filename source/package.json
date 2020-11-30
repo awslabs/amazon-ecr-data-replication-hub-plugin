@@ -1,0 +1,42 @@
+{
+  "name": "aws-data-replication-component-ecr",
+  "version": "0.1.0",
+  "bin": {
+    "aws-data-replication-component-ecr": "bin/aws-data-replication-component-ecr.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@aws-cdk/assert": "1.74.0",
+    "@types/jest": "^26.0.10",
+    "@types/node": "10.17.27",
+    "@types/aws-lambda": "^8.10.61",
+    "jest": "^26.4.2",
+    "ts-jest": "^26.2.0",
+    "aws-cdk": "1.74.0",
+    "aws-sdk": "^2.736.0",
+    "ts-node": "^8.1.0",
+    "typescript": "~3.9.7"
+  },
+  "dependencies": {
+    "@aws-cdk/core": "1.74.0",
+    "@aws-cdk/aws-events": "1.74.0",
+    "@aws-cdk/aws-events-targets": "1.74.0",
+    "@aws-cdk/aws-lambda": "1.74.0",
+    "@aws-cdk/aws-stepfunctions": "1.74.0",
+    "@aws-cdk/aws-stepfunctions-tasks": "1.74.0",
+    "@aws-cdk/aws-ecs": "1.74.0",
+    "@aws-cdk/aws-ec2": "1.74.0",
+    "@aws-cdk/aws-ecr": "1.74.0",
+    "@aws-cdk/aws-dynamodb": "1.74.0",
+    "@aws-cdk/aws-iam": "1.74.0",
+    "@aws-cdk/aws-ssm": "1.74.0",
+    "@aws-cdk/aws-sns": "1.74.0",
+    "@aws-cdk/aws-sns-subscriptions": "1.74.0",
+    "source-map-support": "^0.5.16"
+  }
+}
