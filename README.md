@@ -84,15 +84,15 @@ The following are the all allowed parameters for deployment:
 | Parameter                 | Default          | Description                                                                                                               |
 |---------------------------|------------------|---------------------------------------------------------------------------------------------------------------------------|
 | sourceType                | Amazon_ECR       | Choose type of source container registry, for example Amazon_ECR, or Public from Docker Hub, gco.io, etc.                 |
-| srcRegion                 | us-east-1        | Source AWS Region (only required if source type is Amazon ECR).                                                           |
+| srcRegion                 | ''               | Source AWS Region (only required if source type is Amazon ECR).                                                           |
 | srcAccountId              | ''               | Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account.       |
 | srcList                   | ALL              | Type of Source Image List.  Either ALL or SELECTED                                                                        |
 | srcImageList              | ''               | Source Image List delimited by comma, for example, ubuntu:latest,alpine:latest... If srcList is ALL, this will be ignored.|
 | srcCredential             | ''               | The Parameter in System Managers used to keep credentials to pull images from source.                                     |
-| destRegion                | cn-north-1       | Destination AWS Region.                                                                                                   |
+| destRegion                | ''               | Destination AWS Region.                                                                                                   |
 | destAccountId             | ''               | Destination AWS Account ID, leave it blank if destination is in current account.                                          |
 | destPrefix                | ''               | Destination Prefix (Leave blank, Not required for now)                                                                    |
-| destCredential            | drh-credentials  | The Parameter in System Managers used to keep destination credentials to push images to Amazon ECR.                       |
+| destCredential            | ''               | The Parameter in System Managers used to keep destination credentials to push images to Amazon ECR.                       |
 | ecsClusterName            | <requires input> | ECS Cluster Name to run ECS task                                                                                          |
 | ecsVpcId                  | <requires input> | VPC ID to run ECS task, e.g. vpc-bef13dc7                                                                                 |
 | ecsSubnetA                | <requires input> | Subnet IDs to run ECS task. Please provide two subnet IDs for high availability.                                          |
@@ -110,11 +110,11 @@ Please follow below steps to deploy this plugin via AWS Cloudformation.
 
     - For Standard Partition
 
-    [![Launch Stack](launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.amazonaws.com/Aws-data-replication-component-ecr/latest/Aws-data-replication-component-ecr.template)
+    [![Launch Stack](launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.amazonaws.com/Aws-data-replication-component-ecr/latest/AwsDataReplicationComponentEcrStack.template)
 
     - For China Partition
 
-    [![Launch Stack](launch-stack.svg)](https://console.amazonaws.cn/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.cn-north-1.amazonaws.com.cn/Aws-data-replication-component-ecr/latest/Aws-data-replication-component-ecr.template)
+    [![Launch Stack](launch-stack.svg)](https://console.amazonaws.cn/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.cn-north-1.amazonaws.com.cn/Aws-data-replication-component-ecr/latest/AwsDataReplicationComponentEcrStack.template)
     
 1. Click **Next**. Specify values to parameters accordingly. Change the stack name if required.
 

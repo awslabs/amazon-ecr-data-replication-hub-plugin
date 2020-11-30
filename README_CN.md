@@ -82,15 +82,15 @@
 | 参数 | 默认值  | 参数描述   |
 |---------------------------|------------------|------------------------------------------------------|
 | sourceType| Amazon_ECR   | 选择源容器仓库的类型，例如Amazon_ECR或来自Docker Hub，gco.io等的Public 仓库。 |
-| srcRegion | us-east-1| 源 AWS 区域（Region） (仅在源类型为Amazon ECR时才需要).   |
+| srcRegion | '' | 源 AWS 区域（Region） (仅在源类型为Amazon ECR时才需要).   |
 | srcAccountId  | ''   | 源 AWS 账户 ID (仅在源类型为Amazon ECR时才需要), 如果来源在当前帐户中，则将其留空。   |
 | srcList   | ALL  | 源图像列表的类型。 ALL 或 SELECTED |
 | srcImageList  | ''   | 以逗号分隔的源镜像列表, 例如 ubuntu:latest,alpine:latest... 如果 srcList 为 ALL, 则此参数会被忽略.|
 | srcCredential | ''   | AWS System Managers 中的参数，用来获取从源端拉取镜像的访问凭证. |
-| destRegion| cn-north-1   | 目标AWS区域. |
+| destRegion| ''   | 目标AWS区域. |
 | destAccountId | ''   | 目标AWS账户ID，如果目标账户为当前账户，则将其留空。 |
 | destPrefix| ''   | 目标前缀（请保留为空白，暂时不需要）|
-| destCredential| drh-credentials  | AWS System Managers 中的参数，用来获取向目标端推送镜像的访问凭证. |
+| destCredential| ''  | AWS System Managers 中的参数，用来获取向目标端推送镜像的访问凭证. |
 | ecsClusterName| <requires input> | 用于运行 ECS task 的 ECS Cluster 名称 |
 | ecsVpcId  | <requires input> | 用于运行 ECS task 的 VPC ID, 例如 vpc-bef13dc7 |
 | ecsSubnetA| <requires input> | 用于运行 ECS task 的 Subnet IDs. 请提供两个子网ID以实现高可用性。  |
@@ -108,11 +108,11 @@
 
     - 对于Global区
 
-    [![Launch Stack](launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.amazonaws.com/Aws-data-replication-component-ecr/latest/Aws-data-replication-component-ecr.template)
+    [![Launch Stack](launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.amazonaws.com/Aws-data-replication-component-ecr/latest/AwsDataReplicationComponentEcrStack.template)
 
     - 对于中国区
 
-    [![Launch Stack](launch-stack.svg)](https://console.amazonaws.cn/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.cn-north-1.amazonaws.com.cn/Aws-data-replication-component-ecr/latest/Aws-data-replication-component-ecr.template)
+    [![Launch Stack](launch-stack.svg)](https://console.amazonaws.cn/cloudformation/home#/stacks/create/template?stackName=DataReplicationECRStack&templateURL=https://aws-gcr-solutions.s3.cn-north-1.amazonaws.com.cn/Aws-data-replication-component-ecr/latest/AwsDataReplicationComponentEcrStack.template)
     
 1. 点击 **Next**. 相应地为参数指定值。如果需要，请更改堆栈名称。
 
