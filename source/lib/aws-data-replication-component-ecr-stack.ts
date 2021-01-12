@@ -16,6 +16,8 @@ import * as iam from '@aws-cdk/aws-iam';
 
 import * as path from 'path';
 
+const { VERSION } = process.env;
+
 export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -121,8 +123,7 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       type: 'String',
     })
 
-
-    this.templateOptions.description = 'Data Replication Hub - ECR Plugin Cloudformation Template';
+    this.templateOptions.description = `(SO8003) - Data Replication Hub - ECR Plugin - Template version ${VERSION}`;
 
     this.templateOptions.metadata = {
       'AWS::CloudFormation::Interface': {
