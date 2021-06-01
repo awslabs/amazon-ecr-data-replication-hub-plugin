@@ -57,9 +57,9 @@ Things to know about the deployment of this plugin:
 
 - Configure **credentials**
 
-If source (or destination) is NOT in current AWS account, you will need to provide `AccessKeyID` and `SecretAccessKey` (namely `AK/SK`) to pull from or push to Amazon ECR. And a Parameter Store is used to store the credentials in a secure manner.
+If source (or destination) is NOT in current AWS account, you will need to provide `AccessKeyID` and `SecretAccessKey` (namely `AK/SK`) to pull from or push to Amazon ECR. And Secrets Manager is used to store the credentials in a secure manner.
 
-Please create a parameter in **Parameter Store** from **AWS Systems Manager**, you can use default name `drh-credentials` (optional), select **SecureString** as its type, and put a **Value** following below format.
+Please create a secret in **Secrets Manager**, you can use default name `drh-credentials` (optional), select **Other type of secrets** as its type, and put a **Plaintext** following below format.
 
 ```
 {
@@ -88,11 +88,11 @@ The following are the all allowed parameters for deployment:
 | srcAccountId              | ''               | Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account.       |
 | srcList                   | ALL              | Type of Source Image List.  Either ALL or SELECTED                                                                        |
 | srcImageList              | ''               | Source Image List delimited by comma, for example, ubuntu:latest,alpine:latest... If srcList is ALL, this will be ignored.|
-| srcCredential             | ''               | The Parameter in System Managers used to keep credentials to pull images from source.                                     |
+| srcCredential             | ''               | The Parameter in Secrets Manager used to keep credentials to pull images from source.                                     |
 | destRegion                | ''               | Destination AWS Region.                                                                                                   |
 | destAccountId             | ''               | Destination AWS Account ID, leave it blank if destination is in current account.                                          |
 | destPrefix                | ''               | Destination Prefix (Leave blank, Not required for now)                                                                    |
-| destCredential            | ''               | The Parameter in System Managers used to keep destination credentials to push images to Amazon ECR.                       |
+| destCredential            | ''               | The Parameter in Secrets Manager used to keep destination credentials to push images to Amazon ECR.                       |
 | ecsClusterName            | <requires input> | ECS Cluster Name to run ECS task                                                                                          |
 | ecsVpcId                  | <requires input> | VPC ID to run ECS task, e.g. vpc-bef13dc7                                                                                 |
 | ecsSubnetA                | <requires input> | Subnet IDs to run ECS task. Please provide two subnet IDs for high availability.                                          |
