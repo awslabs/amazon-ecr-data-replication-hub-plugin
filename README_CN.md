@@ -56,9 +56,9 @@
 
 - 配置 **访问凭证**
 
-如果源（或目标）不在当前的AWS账户中，则您需要提供`AccessKeyID`和`SecretAccessKey`（即`AK` / `SK`）以从Amazon ECR中拉取或推送镜像。 AWS Parameter Store 用于以安全方式存储访问凭证。
+如果源（或目标）不在当前的AWS账户中，则您需要提供`AccessKeyID`和`SecretAccessKey`（即`AK` / `SK`）以从Amazon ECR中拉取或推送镜像。 Amazon Secrets Manager 用于以安全方式存储访问凭证。
 
-请在 **AWS Systems Manager** 的 **Parameter Store** 中创建一个参数，您可以使用默认名称`drh-credentials`（可选），选择 **SecureString**作为其类型，然后输入 **Value**，请遵循以下格式。
+请在 **Amazon Secrets Manager** 中创建一个参数，您可以使用默认名称`drh-credentials`（可选），选择 **Other type of secrets** 作为其类型，然后输入 **Plaintext**，请遵循以下格式。
 
 ```
 {
@@ -86,11 +86,11 @@
 | srcAccountId  | ''   | 源 AWS 账户 ID (仅在源类型为Amazon ECR时才需要), 如果来源在当前帐户中，则将其留空。   |
 | srcList   | ALL  | 源图像列表的类型。 ALL 或 SELECTED |
 | srcImageList  | ''   | 以逗号分隔的源镜像列表, 例如 ubuntu:latest,alpine:latest... 如果 srcList 为 ALL, 则此参数会被忽略.|
-| srcCredential | ''   | AWS System Managers 中的参数，用来获取从源端拉取镜像的访问凭证. |
+| srcCredential | ''   | Amazon Secrets Manager 中的参数，用来获取从源端拉取镜像的访问凭证. |
 | destRegion| ''   | 目标AWS区域. |
 | destAccountId | ''   | 目标AWS账户ID，如果目标账户为当前账户，则将其留空。 |
 | destPrefix| ''   | 目标前缀（请保留为空白，暂时不需要）|
-| destCredential| ''  | AWS System Managers 中的参数，用来获取向目标端推送镜像的访问凭证. |
+| destCredential| ''  | Amazon Secrets Manager 中的参数，用来获取向目标端推送镜像的访问凭证. |
 | ecsClusterName| <requires input> | 用于运行 ECS task 的 ECS Cluster 名称 |
 | ecsVpcId  | <requires input> | 用于运行 ECS task 的 VPC ID, 例如 vpc-bef13dc7 |
 | ecsSubnetA| <requires input> | 用于运行 ECS task 的 Subnet IDs. 请提供两个子网ID以实现高可用性。  |

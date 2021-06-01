@@ -5,29 +5,27 @@ set -e
 echo "[Init] Get Image Repo Name and Tag"
 echo "repo is $IMAGE and tag is $TAG"
 
-echo "[Init] Get ssm info"
+echo "[Init] Get Secrets Manager info"
 
-# function to get AK/SK stored in SSM
-# usage get_aksk param_name
 get_aksk()
 {
-  echo "Get AK/SK in ssm"
+  echo "Get AK/SK in Secrets Manager"
   if [ -z "$1" ]; then
     echo "No credential is provided, no ak/sk"
     ak='0'
     sk='0'
   else
     echo "Get $1 from $AWS_DEFAULT_REGION"
-    cred_ssm=$(aws ssm get-parameter --name $1 --with-decryption --region $AWS_DEFAULT_REGION)
-    ak=$(echo $cred_ssm | jq -c '.Parameter.Value | fromjson | .access_key_id' | tr -d '"') 
-    sk=$(echo $cred_ssm | jq -c '.Parameter.Value | fromjson | .secret_access_key' | tr -d '"')
+    cred_secret_manager=$(aws secretsmanager get-secret-value --secret-id $1 --version-stage AWSCURRENT)
+    ak=$(echo $cred_secret_manager | jq -c '.SecretString | fromjson | .access_key_id' | tr -d '"')     
+    sk=$(echo $cred_secret_manager | jq -c '.SecretString | fromjson | .secret_access_key' | tr -d '"')
   fi
 }
 
-get_aksk $SRC_CREDENTIAL
+get_aksk $SRC_CREDENTIAL_NAME
 src_ak=$ak
 src_sk=$sk
-get_aksk $DEST_CREDENTIAL
+get_aksk $DEST_CREDENTIAL_NAME
 dest_ak=$ak
 dest_sk=$sk
 
