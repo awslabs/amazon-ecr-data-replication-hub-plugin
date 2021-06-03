@@ -5,3 +5,12 @@ CONTRIBUTING.md
 index.js
 package-lock.json
 aws-data-replication-component-ecr-stack.js
+
+CUSTOM_BUILD.md                                        
+deployment/build-ecr.sh                                
+source/ecr/copy.sh                                     
+source/ecr/copy.sh                                     
+source/lambda/index.ts                                 
+source/lambda/index.ts                                 
+source/lib/aws-data-replication-component-ecr-stack.ts 
+Config                                               
