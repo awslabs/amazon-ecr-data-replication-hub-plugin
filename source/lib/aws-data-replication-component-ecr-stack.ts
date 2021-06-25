@@ -36,87 +36,116 @@ export function addCfnNagSuppressRules(resource: cdk.CfnResource, rules: CfnNagS
 }
 
 
-export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
+export class DataTransferECRStack extends cdk.Stack {
+  private paramGroups: any[] = [];
+  private paramLabels: any = {};
+
+  private addToParamGroups(label: string, ...param: string[]) {
+    this.paramGroups.push({
+      Label: { default: label },
+      Parameters: param
+
+    });
+  };
+
+  private addToParamLabels(label: string, param: string) {
+    this.paramLabels[param] = {
+      default: label
+    }
+  }
+
+
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     // The code that defines your stack goes here
 
     const sourceType = new cdk.CfnParameter(this, 'sourceType', {
-      description: 'Source Type',
+      description: 'Choose type of source container registry, for example Amazon_ECR, or Public from Docker Hub, gco.io, etc.',
       type: 'String',
       default: 'Amazon_ECR',
       allowedValues: ['Amazon_ECR', 'Public']
     })
+    this.addToParamLabels('Source Type', sourceType.logicalId)
 
     // Only required for ECR
     const srcRegion = new cdk.CfnParameter(this, 'srcRegion', {
-      description: 'Source AWS Region',
+      description: 'Source Region Name (only required if source type is Amazon ECR), for example, us-west-1',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Source Region', srcRegion.logicalId)
 
     // Only required for ECR
     const srcAccountId = new cdk.CfnParameter(this, 'srcAccountId', {
-      description: 'Source AWS Account ID',
+      description: 'Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account',
       type: 'String',
       default: '',
     })
-
+    this.addToParamLabels('Source AWS Account ID', srcAccountId.logicalId)
     //
     const srcList = new cdk.CfnParameter(this, 'srcList', {
-      description: 'Type of Source Image List',
+      description: 'Source Image Type, either ALL or SELECTED',
       type: 'String',
       default: 'ALL',
       allowedValues: ['ALL', 'SELECTED']
     })
+    this.addToParamLabels('Type of Source Image List', srcList.logicalId)
 
     const srcImageList = new cdk.CfnParameter(this, 'srcImageList', {
-      description: 'Source Image List delimited by comma',
+      description: 'Selected Image List delimited by comma, for example, ubuntu:latest,alpine:latest...',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Source Image List delimited by comma', srcImageList.logicalId)
 
     // Currently, only required if source type is ECR
     const srcCredential = new cdk.CfnParameter(this, 'srcCredential', {
-      description: 'Source Credentials Name in Secrets Managers',
+      description: 'The secret\'s name Secrets Manager used to keep credentials to pull images from source',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Source Credentials Name in Secrets Managers', srcCredential.logicalId)
 
 
     const destRegion = new cdk.CfnParameter(this, 'destRegion', {
-      description: 'Destination AWS Region',
+      description: 'Destination AWS Region Name, for example, cn-north-1',
       type: 'String',
     })
+    this.addToParamLabels('Destination AWS Region', destRegion.logicalId)
 
     const destAccountId = new cdk.CfnParameter(this, 'destAccountId', {
-      description: 'Destination AWS Account ID',
+      description: 'Destination AWS Account ID, leave it blank if destination is in current account',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Destination AWS Account ID', destAccountId.logicalId)
 
     const destPrefix = new cdk.CfnParameter(this, 'destPrefix', {
       description: 'Destination Repo Prefix',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Destination Repo Prefix', destPrefix.logicalId)
 
     const destCredential = new cdk.CfnParameter(this, 'destCredential', {
-      description: 'Destination Credentials Name in Secrets Managers',
+      description: 'The secret\'s name Secrets Manager used to keep destination credentials to push images to Amazon ECR',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Destination Credentials Name in Secrets Managers', destCredential.logicalId)
 
     const ecsClusterName = new cdk.CfnParameter(this, 'ecsClusterName', {
-      description: 'ECS Cluster Name to run ECS task',
+      description: 'ECS Cluster Name to run ECS task (Please make sure the cluster exists)',
       type: 'String'
     })
+    this.addToParamLabels('ECS Cluster Name', ecsClusterName.logicalId)
 
     const ecsVpcId = new cdk.CfnParameter(this, 'ecsVpcId', {
-      description: 'VPC ID to run ECS task',
+      description: 'VPC ID to run ECS task, e.g. vpc-bef13dc7',
       type: 'AWS::EC2::VPC::Id'
     })
+    this.addToParamLabels('VPC ID to run ECS task', ecsVpcId.logicalId)
 
     // const ecsSubnets = new cdk.CfnParameter(this, 'ecsSubnets', {
     //   description: 'Subnet IDs to run ECS task. Please provide two subnets at least delimited by comma, e.g. subnet-97bfc4cd,subnet-7ad7de32',
@@ -128,94 +157,34 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       description: 'Subnet IDs to run ECS task.',
       type: 'AWS::EC2::Subnet::Id'
     })
+    this.addToParamLabels('Subnet ID', ecsSubnetA.logicalId)
 
     const ecsSubnetB = new cdk.CfnParameter(this, 'ecsSubnetB', {
       description: 'Subnet IDs to run ECS task.',
       type: 'AWS::EC2::Subnet::Id'
     })
+    this.addToParamLabels('Subnet ID', ecsSubnetB.logicalId)
 
     const alarmEmail = new cdk.CfnParameter(this, 'alarmEmail', {
-      description: 'alarm Email address',
+      description: 'Alarm Email address to receive notification in case of any failure',
       // default: '',
       allowedPattern: '\\w[-\\w.+]*@([A-Za-z0-9][-A-Za-z0-9]+\\.)+[A-Za-z]{2,14}',
       type: 'String',
     })
+    this.addToParamLabels('alarm Email address', alarmEmail.logicalId)
 
+    this.addToParamGroups('Type', sourceType.logicalId)
+    this.addToParamGroups('Source Information', srcRegion.logicalId, srcAccountId.logicalId, srcList.logicalId, srcImageList.logicalId, srcCredential.logicalId)
+    this.addToParamGroups('Destination Information', destRegion.logicalId, destAccountId.logicalId, destPrefix.logicalId, destCredential.logicalId)
+    this.addToParamGroups('ECS Cluster Information', ecsClusterName.logicalId, ecsVpcId.logicalId, ecsSubnetA.logicalId, ecsSubnetB.logicalId)
+    this.addToParamGroups('Notification Information', alarmEmail.logicalId)
 
     this.templateOptions.description = `(SO8003) - Data Transfer Hub - ECR Plugin Cloudformation Template version ${VERSION}`;
-
+    
     this.templateOptions.metadata = {
       'AWS::CloudFormation::Interface': {
-        ParameterGroups: [
-          {
-            Label: { default: 'Type' },
-            Parameters: [sourceType.logicalId]
-          },
-          {
-            Label: { default: 'Source' },
-            Parameters: [srcRegion.logicalId, srcAccountId.logicalId, srcList.logicalId, srcImageList.logicalId, srcCredential.logicalId]
-          },
-          {
-            Label: { default: 'Destination' },
-            Parameters: [destRegion.logicalId, destAccountId.logicalId, destPrefix.logicalId, destCredential.logicalId]
-          },
-          {
-            Label: { default: 'ECS Cluster' },
-            Parameters: [ecsClusterName.logicalId, ecsVpcId.logicalId, ecsSubnetA.logicalId, ecsSubnetB.logicalId]
-          },
-          {
-            Label: { default: 'Advanced Options' },
-            Parameters: [alarmEmail.logicalId]
-          },
-        ],
-        ParameterLabels: {
-          [sourceType.logicalId]: {
-            default: 'Choose type of source container registry, for example Amazon_ECR, or Public from Docker Hub, gco.io, etc.'
-          },
-          [srcRegion.logicalId]: {
-            default: 'Source AWS Region (only required if source type is Amazon ECR), for example, us-west-1'
-          },
-          [srcAccountId.logicalId]: {
-            default: 'Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account'
-          },
-          [srcList.logicalId]: {
-            default: 'Source Image Type, either ALL or SELECTED'
-          },
-          [srcImageList.logicalId]: {
-            default: 'Selected Image List delimited by comma, for example, ubuntu:latest,alpine:latest...'
-          },
-          [srcCredential.logicalId]: {
-            default: 'The secret\'s name Secrets Manager used to keep credentials to pull images from source'
-          },
-          [destRegion.logicalId]: {
-            default: 'Destination AWS Region Name, for example, cn-north-1'
-          },
-          [destAccountId.logicalId]: {
-            default: 'Destination AWS Account ID, leave it blank if destination is in current account'
-          },
-          [destPrefix.logicalId]: {
-            default: 'Destination Repo Prefix'
-          },
-          [destCredential.logicalId]: {
-            default: 'The secret\'s name Secrets Manager used to keep destination credentials to push images to Amazon ECR'
-          },
-          [ecsClusterName.logicalId]: {
-            Default: 'ECS Cluster Name to run Fargate task'
-          },
-          [ecsVpcId.logicalId]: {
-            Default: 'VPC ID to run Fargate task'
-          },
-          [ecsSubnetA.logicalId]: {
-            Default: 'Subnet IDs to run Fargate task'
-          },
-          [ecsSubnetB.logicalId]: {
-            Default: 'Subnet IDs to run Fargate task'
-          },
-          [alarmEmail.logicalId]: {
-            default: 'Alarm Email address to receive notification in case of any failure'
-          },
-
-        }
+        ParameterGroups: this.paramGroups,
+        ParameterLabels: this.paramLabels,
       }
     }
 
