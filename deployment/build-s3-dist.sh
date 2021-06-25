@@ -30,10 +30,15 @@
 # cdk_version=1.74.0
 
 # Check to see if the required parameters have been provided:
-if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+if [ -z "$1" ] || [ -z "$2" ]; then
     echo "Please provide the base source bucket name, trademark approved solution name and version where the lambda code will eventually reside."
     echo "For example: ./build-s3-dist.sh solutions trademarked-solution-name v1.0.0"
     exit 1
+fi
+if [ -z "$3" ]; then
+    export VERSION=$(git describe --tags || echo latest)
+else
+    export VERSION=$3
 fi
 
 # Get reference for all important folders
@@ -60,6 +65,9 @@ rm -rf $staging_dist_dir
 echo "mkdir -p $staging_dist_dir"
 mkdir -p $staging_dist_dir
 
+echo "VERSION=${VERSION}"
+echo "${VERSION}" > $template_dist_dir/version
+
 echo "------------------------------------------------------------------------------"
 echo "[Init] Install dependencies for the cdk-solution-helper"
 echo "------------------------------------------------------------------------------"
@@ -82,7 +90,7 @@ cd $source_dir
 
 # Install and build
 echo "npm install && npm run build"
-# npm install && npm run build
+npm install
 npm run build
 
 # Run 'cdk synth' to generate raw solution outputs
@@ -131,7 +139,7 @@ sed -i -e $replace $template_dist_dir/*.template
 replace="s/%%SOLUTION_NAME%%/$2/g"
 echo "sed -i -e $replace $template_dist_dir/*.template"
 sed -i -e $replace $template_dist_dir/*.template
-replace="s/%%VERSION%%/$3/g"
+replace="s/%%VERSION%%/$VERSION/g"
 echo "sed -i -e $replace $template_dist_dir/*.template"
 sed -i -e $replace $template_dist_dir/*.template
 

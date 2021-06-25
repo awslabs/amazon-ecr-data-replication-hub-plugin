@@ -19,6 +19,10 @@ const global_s3_assets = '../global-s3-assets';
 
 // For each template in global_s3_assets ...
 fs.readdirSync(global_s3_assets).forEach(file => {
+  const isTemplate = file.endsWith('.template') || file.endsWith('.template.json');
+  if (!isTemplate) {
+    return
+  }
 
   // Import and parse template file
   const raw_template = fs.readFileSync(`${global_s3_assets}/${file}`);
@@ -45,8 +49,28 @@ fs.readdirSync(global_s3_assets).forEach(file => {
       // Set the handler
       // const handler = fn.Properties.Handler;
       // fn.Properties.Handler = `${assetPath}/${handler}`;
+      let metadata = Object.assign(fn.Metadata);
+      fn.Metadata = {
+        ...metadata,
+        'cfn_nag': {
+          'rules_to_suppress': [
+            {
+              id: 'W58',
+              reason: 'False alarm: The Lambda function does have the permission to write CloudWatch Logs.'
+            },
+            {
+              id: 'W89',
+              reason: 'This is a fully serverless solution - no VPC is required'
+            },
+            {
+              id: 'W92'
+            },
+          ]
+        }
+      };
     }
   });
+
 
   // Clean-up parameters section
   const parameters = (template.Parameters) ? template.Parameters : {};

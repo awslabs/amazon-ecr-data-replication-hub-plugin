@@ -13,92 +13,139 @@ import * as subscriptions from '@aws-cdk/aws-sns-subscriptions';
 import { Rule, Schedule } from '@aws-cdk/aws-events';
 import { SfnStateMachine } from '@aws-cdk/aws-events-targets';
 import * as iam from '@aws-cdk/aws-iam';
-
+import * as secretsmanager from '@aws-cdk/aws-secretsmanager';
+import * as logs from '@aws-cdk/aws-logs';
+import * as kms from '@aws-cdk/aws-kms';
 import * as path from 'path';
 
 const { VERSION } = process.env;
 
-export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
+/**
+ * cfn-nag suppression rule interface
+ */
+interface CfnNagSuppressRule {
+  readonly id: string;
+  readonly reason: string;
+}
+
+
+export function addCfnNagSuppressRules(resource: cdk.CfnResource, rules: CfnNagSuppressRule[]) {
+  resource.addMetadata('cfn_nag', {
+    rules_to_suppress: rules
+  });
+}
+
+
+export class DataTransferECRStack extends cdk.Stack {
+  private paramGroups: any[] = [];
+  private paramLabels: any = {};
+
+  private addToParamGroups(label: string, ...param: string[]) {
+    this.paramGroups.push({
+      Label: { default: label },
+      Parameters: param
+
+    });
+  };
+
+  private addToParamLabels(label: string, param: string) {
+    this.paramLabels[param] = {
+      default: label
+    }
+  }
+
+
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     // The code that defines your stack goes here
 
     const sourceType = new cdk.CfnParameter(this, 'sourceType', {
-      description: 'Source Type',
+      description: 'Choose type of source container registry, for example Amazon_ECR, or Public from Docker Hub, gco.io, etc.',
       type: 'String',
       default: 'Amazon_ECR',
       allowedValues: ['Amazon_ECR', 'Public']
     })
+    this.addToParamLabels('Source Type', sourceType.logicalId)
 
     // Only required for ECR
     const srcRegion = new cdk.CfnParameter(this, 'srcRegion', {
-      description: 'Source AWS Region',
+      description: 'Source Region Name (only required if source type is Amazon ECR), for example, us-west-1',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Source Region', srcRegion.logicalId)
 
     // Only required for ECR
     const srcAccountId = new cdk.CfnParameter(this, 'srcAccountId', {
-      description: 'Source AWS Account ID',
+      description: 'Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account',
       type: 'String',
       default: '',
     })
-
+    this.addToParamLabels('Source AWS Account ID', srcAccountId.logicalId)
     //
     const srcList = new cdk.CfnParameter(this, 'srcList', {
-      description: 'Type of Source Image List',
+      description: 'Source Image Type, either ALL or SELECTED',
       type: 'String',
       default: 'ALL',
       allowedValues: ['ALL', 'SELECTED']
     })
+    this.addToParamLabels('Type of Source Image List', srcList.logicalId)
 
     const srcImageList = new cdk.CfnParameter(this, 'srcImageList', {
-      description: 'Source Image List delimited by comma',
+      description: 'Selected Image List delimited by comma, for example, ubuntu:latest,alpine:latest...',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Source Image List delimited by comma', srcImageList.logicalId)
 
     // Currently, only required if source type is ECR
     const srcCredential = new cdk.CfnParameter(this, 'srcCredential', {
-      description: 'Source Credentials Parameter in System Managers',
+      description: 'The secret\'s name Secrets Manager used to keep credentials to pull images from source',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Source Credentials Name in Secrets Managers', srcCredential.logicalId)
 
 
     const destRegion = new cdk.CfnParameter(this, 'destRegion', {
-      description: 'Destination AWS Region',
+      description: 'Destination AWS Region Name, for example, cn-north-1',
       type: 'String',
     })
+    this.addToParamLabels('Destination AWS Region', destRegion.logicalId)
 
     const destAccountId = new cdk.CfnParameter(this, 'destAccountId', {
-      description: 'Destination AWS Account ID',
+      description: 'Destination AWS Account ID, leave it blank if destination is in current account',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Destination AWS Account ID', destAccountId.logicalId)
 
     const destPrefix = new cdk.CfnParameter(this, 'destPrefix', {
       description: 'Destination Repo Prefix',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Destination Repo Prefix', destPrefix.logicalId)
 
     const destCredential = new cdk.CfnParameter(this, 'destCredential', {
-      description: 'Destination Credentials Parameter in System Managers',
+      description: 'The secret\'s name Secrets Manager used to keep destination credentials to push images to Amazon ECR',
       type: 'String',
       default: '',
     })
+    this.addToParamLabels('Destination Credentials Name in Secrets Managers', destCredential.logicalId)
 
     const ecsClusterName = new cdk.CfnParameter(this, 'ecsClusterName', {
-      description: 'ECS Cluster Name to run ECS task',
+      description: 'ECS Cluster Name to run ECS task (Please make sure the cluster exists)',
       type: 'String'
     })
+    this.addToParamLabels('ECS Cluster Name', ecsClusterName.logicalId)
 
     const ecsVpcId = new cdk.CfnParameter(this, 'ecsVpcId', {
-      description: 'VPC ID to run ECS task',
+      description: 'VPC ID to run ECS task, e.g. vpc-bef13dc7',
       type: 'AWS::EC2::VPC::Id'
     })
+    this.addToParamLabels('VPC ID to run ECS task', ecsVpcId.logicalId)
 
     // const ecsSubnets = new cdk.CfnParameter(this, 'ecsSubnets', {
     //   description: 'Subnet IDs to run ECS task. Please provide two subnets at least delimited by comma, e.g. subnet-97bfc4cd,subnet-7ad7de32',
@@ -110,93 +157,34 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       description: 'Subnet IDs to run ECS task.',
       type: 'AWS::EC2::Subnet::Id'
     })
+    this.addToParamLabels('Subnet ID', ecsSubnetA.logicalId)
 
     const ecsSubnetB = new cdk.CfnParameter(this, 'ecsSubnetB', {
       description: 'Subnet IDs to run ECS task.',
       type: 'AWS::EC2::Subnet::Id'
     })
+    this.addToParamLabels('Subnet ID', ecsSubnetB.logicalId)
 
     const alarmEmail = new cdk.CfnParameter(this, 'alarmEmail', {
-      description: 'alarm Email address',
+      description: 'Alarm Email address to receive notification in case of any failure',
       // default: '',
       allowedPattern: '\\w[-\\w.+]*@([A-Za-z0-9][-A-Za-z0-9]+\\.)+[A-Za-z]{2,14}',
       type: 'String',
     })
+    this.addToParamLabels('alarm Email address', alarmEmail.logicalId)
 
-    this.templateOptions.description = `(SO8003) - Data Replication Hub - ECR Plugin - Template version ${VERSION}`;
+    this.addToParamGroups('Type', sourceType.logicalId)
+    this.addToParamGroups('Source Information', srcRegion.logicalId, srcAccountId.logicalId, srcList.logicalId, srcImageList.logicalId, srcCredential.logicalId)
+    this.addToParamGroups('Destination Information', destRegion.logicalId, destAccountId.logicalId, destPrefix.logicalId, destCredential.logicalId)
+    this.addToParamGroups('ECS Cluster Information', ecsClusterName.logicalId, ecsVpcId.logicalId, ecsSubnetA.logicalId, ecsSubnetB.logicalId)
+    this.addToParamGroups('Notification Information', alarmEmail.logicalId)
 
+    this.templateOptions.description = `(SO8003) - Data Transfer Hub - ECR Plugin Cloudformation Template version ${VERSION}`;
+    
     this.templateOptions.metadata = {
       'AWS::CloudFormation::Interface': {
-        ParameterGroups: [
-          {
-            Label: { default: 'Type' },
-            Parameters: [sourceType.logicalId]
-          },
-          {
-            Label: { default: 'Source' },
-            Parameters: [srcRegion.logicalId, srcAccountId.logicalId, srcList.logicalId, srcImageList.logicalId, srcCredential.logicalId]
-          },
-          {
-            Label: { default: 'Destination' },
-            Parameters: [destRegion.logicalId, destAccountId.logicalId, destPrefix.logicalId, destCredential.logicalId]
-          },
-          {
-            Label: { default: 'ECS Cluster' },
-            Parameters: [ecsClusterName.logicalId, ecsVpcId.logicalId, ecsSubnetA.logicalId, ecsSubnetB.logicalId]
-          },
-          {
-            Label: { default: 'Advanced Options' },
-            Parameters: [alarmEmail.logicalId]
-          },
-        ],
-        ParameterLabels: {
-          [sourceType.logicalId]: {
-            default: 'Choose type of source container registry, for example Amazon_ECR, or Public from Docker Hub, gco.io, etc.'
-          },
-          [srcRegion.logicalId]: {
-            default: 'Source AWS Region (only required if source type is Amazon ECR), for example, us-west-1'
-          },
-          [srcAccountId.logicalId]: {
-            default: 'Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account'
-          },
-          [srcList.logicalId]: {
-            default: 'Source Image Type, either ALL or SELECTED'
-          },
-          [srcImageList.logicalId]: {
-            default: 'Selected Image List delimited by comma, for example, ubuntu:latest,alpine:latest...'
-          },
-          [srcCredential.logicalId]: {
-            default: 'The Parameter in System Managers used to keep credentials to pull images from source'
-          },
-          [destRegion.logicalId]: {
-            default: 'Destination AWS Region Name, for example, cn-north-1'
-          },
-          [destAccountId.logicalId]: {
-            default: 'Destination AWS Account ID, leave it blank if destination is in current account'
-          },
-          [destPrefix.logicalId]: {
-            default: 'Destination Repo Prefix'
-          },
-          [destCredential.logicalId]: {
-            default: 'The Parameter in System Managers used to keep destination credentials to push images to Amazon ECR'
-          },
-          [ecsClusterName.logicalId]: {
-            Default: 'ECS Cluster Name to run Fargate task'
-          },
-          [ecsVpcId.logicalId]: {
-            Default: 'VPC ID to run Fargate task'
-          },
-          [ecsSubnetA.logicalId]: {
-            Default: 'Subnet IDs to run Fargate task'
-          },
-          [ecsSubnetB.logicalId]: {
-            Default: 'Subnet IDs to run Fargate task'
-          },
-          [alarmEmail.logicalId]: {
-            default: 'Alarm Email address to receive notification in case of any failure'
-          },
-
-        }
+        ParameterGroups: this.paramGroups,
+        ParameterLabels: this.paramLabels,
       }
     }
 
@@ -240,8 +228,17 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       partitionKey: { name: 'Image', type: ddb.AttributeType.STRING },
       sortKey: { name: 'Tag', type: ddb.AttributeType.STRING },
       billingMode: ddb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      pointInTimeRecovery: true,
     })
+
+    const cfnTable = imageTable.node.defaultChild as ddb.CfnTable
+    addCfnNagSuppressRules(cfnTable, [
+      {
+        id: 'W74',
+        reason: 'This table is set to use DEFAULT encryption, the key is owned by DDB.'
+      },
+    ])
 
     const listImagesLambda = new lambda.Function(this, 'ListImagesFunction', {
       runtime: lambda.Runtime.NODEJS_12_X,
@@ -255,10 +252,13 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
         SRC_ACCOUNT_ID: srcAccountId.valueAsString,
         SRC_LIST: srcList.valueAsString,
         SRC_REGION: srcRegion.valueAsString,
-        SRC_CREDENTIAL: srcCredential.valueAsString,
+        SRC_CREDENTIAL_NAME: srcCredential.valueAsString,
         SELECTED_IMAGE_PARAM: selectedImageParam.parameterName,
       }
     });
+
+    const srcSecretParam = secretsmanager.Secret.fromSecretNameV2(this, 'srcSecretParam', srcCredential.valueAsString);
+    const desSecretParam = secretsmanager.Secret.fromSecretNameV2(this, 'desSecretParam', destCredential.valueAsString);
 
     listImagesLambda.addToRolePolicy(
       new iam.PolicyStatement({
@@ -273,6 +273,7 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
     );
 
     selectedImageParam.grantRead(listImagesLambda);
+    srcSecretParam.grantRead(listImagesLambda);
 
     const vpc = ec2.Vpc.fromVpcAttributes(this, 'ECSVpc', {
       vpcId: ecsVpcId.valueAsString,
@@ -287,54 +288,70 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       securityGroups: []
     })
 
+    const containerlogGroup = new logs.LogGroup(this, `DTH-ECR-Container-LogGroup`, {
+      retention: 365
+    });
+    const cfncontainerlogGroup = containerlogGroup.node.defaultChild as logs.CfnLogGroup
+    addCfnNagSuppressRules(cfncontainerlogGroup, [
+      {
+        id: 'W84',
+        reason: 'Log group data is always encrypted in CloudWatch Logs using an AWS Managed KMS Key'
+      },
+    ])
 
-    // Get SSM parameter of credentials
-    const srcCredentialsParam = ssm.StringParameter.fromStringParameterAttributes(this, 'SourceParameterCredentials', {
-      // parameterName: credentialsParameterStore.valueAsString,
-      parameterName: srcCredential.valueAsString,
-      simpleName: true,
-      type: ssm.ParameterType.SECURE_STRING,
-      version: 1
+    // Create ECS executionRole and executionPolicy
+    const ecsTaskExecutionRole = new iam.Role(this, `DTH-ECR-ecrTaskExecutionRole`, {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
     });
 
-    const destCredentialsParam = ssm.StringParameter.fromStringParameterAttributes(this, 'DestinationParameterCredentials', {
-      parameterName: destCredential.valueAsString,
-      simpleName: true,
-      type: ssm.ParameterType.SECURE_STRING,
-      version: 1
+    const taskExecutionPolicy = new iam.Policy(this, 'TaskExecutionPolicy', {
+      policyName: `${cdk.Aws.STACK_NAME}TaskExecutionPolicy`,
+      statements: [
+        new iam.PolicyStatement({
+          actions: [
+            "logs:CreateLogStream",
+            "logs:PutLogEvents"
+          ],
+          resources: [
+            containerlogGroup.logGroupArn
+          ]
+        }),
+      ]
     });
-
-    srcCredentialsParam.grantRead(listImagesLambda)
+    taskExecutionPolicy.node.addDependency(containerlogGroup);
+    taskExecutionPolicy.attachToRole(ecsTaskExecutionRole);
 
     const taskDefinition = new ecs.TaskDefinition(this, 'ECRReplicationTask', {
       memoryMiB: '1024',
       cpu: '512',
       compatibility: ecs.Compatibility.FARGATE,
       family: `${cdk.Aws.STACK_NAME}-ECRReplicationTask`,
+      executionRole: ecsTaskExecutionRole.withoutPolicyUpdates()
     });
+    srcSecretParam.grantRead(taskDefinition.taskRole);
+    desSecretParam.grantRead(taskDefinition.taskRole);
 
-    destCredentialsParam.grantRead(taskDefinition.taskRole)
-    srcCredentialsParam.grantRead(taskDefinition.taskRole)
-
-    const ecrRepositoryArn = 'arn:aws:ecr:us-west-2:627627941158:repository/drh-ecr-replication'
-    const repo = ecr.Repository.fromRepositoryArn(this, 'ECRReplicationRepo', ecrRepositoryArn)
+    const ecrContainer = `public.ecr.aws/aws-gcr-solutions/data-transfer-hub-ecr:${VERSION}`
 
     const containerDefinition = taskDefinition.addContainer('ECRReplicationContainer', {
-      image: ecs.ContainerImage.fromEcrRepository(repo),
+      image: ecs.ContainerImage.fromRegistry(ecrContainer),
       environment: {
         SOURCE_TYPE: sourceType.valueAsString,
         AWS_DEFAULT_REGION: this.region,
         AWS_ACCOUNT_ID: this.account,
         SRC_REGION: srcRegion.valueAsString,
         SRC_ACCOUNT_ID: srcAccountId.valueAsString,
-        SRC_CREDENTIAL: srcCredential.valueAsString,
+        SRC_CREDENTIAL_NAME: srcCredential.valueAsString,
         DEST_REGION: destRegion.valueAsString,
         DEST_ACCOUNT_ID: destAccountId.valueAsString,
         DEST_PREFIX: destPrefix.valueAsString,
-        DEST_CREDENTIAL: destCredential.valueAsString,
+        DEST_CREDENTIAL_NAME: destCredential.valueAsString,
 
       },
-      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'DRH-ECR-replication' })
+      logging: ecs.LogDrivers.awsLogs({
+        streamPrefix: 'DRH-ECR-replication',
+        logGroup: containerlogGroup,
+      })
     });
 
 
@@ -362,6 +379,14 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
         }),
       ]
     });
+
+    const cfnecrSrcReadOnlyPolicy = ecrSrcReadOnlyPolicy.node.defaultChild as iam.CfnPolicy
+    addCfnNagSuppressRules(cfnecrSrcReadOnlyPolicy, [
+      {
+        id: 'W12',
+        reason: 'This IAM policy need * resource'
+      },
+    ])
 
     const ecrSrcPolicy = ecrSrcReadOnlyPolicy.node.defaultChild as iam.CfnPolicy
     ecrSrcPolicy.cfnOptions.condition = isSrcInCurrentAccount
@@ -397,6 +422,13 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
         }),
       ]
     });
+    const cfnecrDestWritePolicy = ecrDestWritePolicy.node.defaultChild as iam.CfnPolicy
+    addCfnNagSuppressRules(cfnecrDestWritePolicy, [
+      {
+        id: 'W12',
+        reason: 'This IAM policy need * resource'
+      },
+    ])
 
     const ecrDestPolicy = ecrDestWritePolicy.node.defaultChild as iam.CfnPolicy
     ecrDestPolicy.cfnOptions.condition = isDestInCurrentAccount
@@ -408,6 +440,23 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       // Lambda's result is in the attribute `Payload`
       outputPath: '$.Payload'
     });
+
+    const clusterSG = new ec2.SecurityGroup(this, 'clusterSG', {
+      allowAllOutbound: true,
+      description: `SG for ${cdk.Aws.STACK_NAME} Fargate Tasks`,
+      vpc: vpc,
+    });
+    const cfnclusterSG = clusterSG.node.defaultChild as ec2.CfnSecurityGroup
+    addCfnNagSuppressRules(cfnclusterSG, [
+      {
+        id: 'W5',
+        reason: 'Egress of 0.0.0.0/0 is required'
+      },
+      {
+        id: 'W40',
+        reason: 'Egress IPProtocol of -1 is required'
+      },
+    ])
 
     const runTask = new tasks.EcsRunTask(this, 'Run Fargate Task', {
       integrationPattern: sfn.IntegrationPattern.RUN_JOB,
@@ -422,7 +471,8 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
         ],
       }],
       launchTarget: new tasks.EcsFargateLaunchTarget(),
-      resultPath: '$.result'
+      resultPath: '$.result',
+      securityGroups: [clusterSG]
     });
 
 
@@ -455,7 +505,14 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       resultPath: '$.result'
     });
 
-    const topic = new sns.Topic(this, 'EcrReplicationTopic');
+    const myKeyAlias = kms.Alias.fromAliasName(this, 'AwsSnsDefaultKey', 'alias/aws/sns');
+
+    const topic = new sns.Topic(this,
+      'EcrReplicationTopic',
+      {
+        masterKey: myKeyAlias,
+      }
+    );
     topic.addSubscription(new subscriptions.EmailSubscription(alarmEmail.valueAsString));
 
     const snsTask = new tasks.SnsPublish(this, 'Publish To SNS', {
@@ -489,12 +546,123 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
 
     submitJob.next(map).next(endState)
 
+    const logGroup = new logs.LogGroup(this, `DTH-ECR-StepFunction-LogGroup`);
+
+    // Create role for Step Machine
+    const ecrStateMachineRole = new iam.Role(this, `DTH-ECR-ecrStateMachineRole`, {
+      assumedBy: new iam.ServicePrincipal('states.amazonaws.com')
+    });
+    const ecrStateMachineRolePolicy = new iam.Policy(this, 'ecrStateMachineRolePolicy');
+
+    ecrStateMachineRolePolicy.addStatements(
+      new iam.PolicyStatement({
+        actions: [
+          'lambda:InvokeFunction'
+        ],
+        resources: [
+          listImagesLambda.functionArn
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          'ecs:RunTask'
+        ],
+        resources: [
+          taskDefinition.taskDefinitionArn
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          "ecs:StopTask",
+          "ecs:DescribeTasks"
+        ],
+        resources: [
+          '*'
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          "iam:PassRole"
+        ],
+        resources: [
+          taskDefinition.taskRole.roleArn,
+          taskDefinition.executionRole!.roleArn
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          "dynamodb:PutItem"
+        ],
+        resources: [
+          imageTable.tableArn
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          "sns:Publish"
+        ],
+        resources: [
+          topic.topicArn
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          "events:PutTargets",
+          "events:PutRule",
+          "events:DescribeRule"
+        ],
+        resources: [
+          `arn:${cdk.Aws.PARTITION}:events:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:rule/StepFunctionsGetEventsForECSTaskRule`,
+        ]
+      }),
+      new iam.PolicyStatement({
+        actions: [
+          'logs:CreateLogDelivery',
+          'logs:GetLogDelivery',
+          'logs:UpdateLogDelivery',
+          'logs:DeleteLogDelivery',
+          'logs:ListLogDeliveries',
+          'logs:PutResourcePolicy',
+          'logs:DescribeResourcePolicies',
+          'logs:DescribeLogGroups'
+        ],
+        resources: [
+          '*'
+        ]
+      }),
+    );
+    ecrStateMachineRolePolicy.node.addDependency(listImagesLambda, taskDefinition, imageTable, topic, logGroup);
+    ecrStateMachineRolePolicy.attachToRole(ecrStateMachineRole);
+    const cfnecrStateMachineRolePolicy = ecrStateMachineRolePolicy.node.defaultChild as iam.CfnPolicy
+    addCfnNagSuppressRules(cfnecrStateMachineRolePolicy, [
+      {
+        id: 'W12',
+        reason: '[*] Access granted as per documentation: https://docs.aws.amazon.com/step-functions/latest/dg/cw-logs.html'
+      },
+      {
+        id: 'W76',
+        reason: 'SPCM complexity greater then 25 is appropriate for the logic implemented'
+      }
+    ])
+
     const ecrStateMachine = new sfn.StateMachine(this, 'ECRReplicationStateMachine', {
       stateMachineName: `${cdk.Aws.STACK_NAME}-ECRReplicationSM`,
-      definition: submitJob
+      role: ecrStateMachineRole.withoutPolicyUpdates(),
+      definition: submitJob,
+      logs: {
+        destination: logGroup,
+        level: sfn.LogLevel.ALL,
+      }
     });
+    const cfnlogGroup = logGroup.node.defaultChild as logs.CfnLogGroup
+    addCfnNagSuppressRules(cfnlogGroup, [
+      {
+        id: 'W84',
+        reason: 'Log group data is always encrypted in CloudWatch Logs using an AWS Managed KMS Key'
+      },
+    ])
 
-    ecrStateMachine.node.addDependency(containerDefinition, taskDefinition, submitJob)
+    ecrStateMachine.node.addDependency(containerDefinition, taskDefinition, submitJob, logGroup, ecrStateMachineRole, ecrStateMachineRolePolicy)
 
     const smRuleRole = new iam.Role(this, 'ECRReplicationSMExecRole', {
       assumedBy: new iam.ServicePrincipal('events.amazonaws.com'),
@@ -515,6 +683,39 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
     });
     smRule.node.addDependency(ecrStateMachine, smRuleRole)
 
+    const checkExecutionLambdaPolicy = new iam.Policy(this, 'CheckExecutionLambdaPolicy', {
+      policyName: `${cdk.Aws.STACK_NAME}CheckExecutionLambdaPolicy`,
+      statements: [
+        new iam.PolicyStatement({
+          actions: [
+            "states:StartExecution",
+            "states:ListExecutions",
+            "states:ListStateMachines",
+            "states:DescribeExecution",
+            "states:DescribeStateMachineForExecution",
+            "states:GetExecutionHistory",
+            "states:ListActivities",
+            "states:DescribeStateMachine",
+            "states:DescribeActivity",
+          ],
+          resources: [
+            '*'
+          ]
+        }),
+      ]
+    });
+
+    const cfncheckExecutionLambdaPolicy = checkExecutionLambdaPolicy.node.defaultChild as iam.CfnPolicy
+    addCfnNagSuppressRules(cfncheckExecutionLambdaPolicy, [
+      {
+        id: 'W12',
+        reason: 'This IAM policy need * resource'
+      },
+    ])
+
+    const checkExecutionLambdaRole = new iam.Role(this, 'CheckExecutionFunctionRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+    })
 
     const checkExecutionLambda = new lambda.Function(this, 'CheckExecutionFunction', {
       runtime: lambda.Runtime.NODEJS_12_X,
@@ -525,9 +726,12 @@ export class AwsDataReplicationComponentEcrStack extends cdk.Stack {
       // tracing: lambda.Tracing.ACTIVE,
       environment: {
         STATE_MACHINE_ARN: ecrStateMachine.stateMachineArn
-      }
+      },
+      role: checkExecutionLambdaRole.withoutPolicyUpdates()
     });
+    checkExecutionLambda.node.addDependency(checkExecutionLambdaRole, checkExecutionLambdaPolicy)
 
+    checkExecutionLambdaPolicy.attachToRole(checkExecutionLambda.role!)
     ecrStateMachine.grantStartExecution(checkExecutionLambda)
     ecrStateMachine.grantRead(checkExecutionLambda)
 
