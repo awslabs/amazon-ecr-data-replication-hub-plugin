@@ -14,24 +14,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import * as cdk from '@aws-cdk/core';
-import * as sfn from '@aws-cdk/aws-stepfunctions';
-import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
-import * as lambda from '@aws-cdk/aws-lambda';
-import * as cr from '@aws-cdk/custom-resources';
-import * as ecs from '@aws-cdk/aws-ecs';
-import * as ec2 from '@aws-cdk/aws-ec2';
-import * as ecr from '@aws-cdk/aws-ecr';
-import * as ssm from '@aws-cdk/aws-ssm';
-import * as ddb from '@aws-cdk/aws-dynamodb';
-import * as sns from '@aws-cdk/aws-sns';
-import * as subscriptions from '@aws-cdk/aws-sns-subscriptions';
-import { Rule, Schedule } from '@aws-cdk/aws-events';
-import { SfnStateMachine } from '@aws-cdk/aws-events-targets';
-import * as iam from '@aws-cdk/aws-iam';
-import * as secretsmanager from '@aws-cdk/aws-secretsmanager';
-import * as logs from '@aws-cdk/aws-logs';
-import * as kms from '@aws-cdk/aws-kms';
+import {
+  Construct,
+} from 'constructs';
+import {
+  Aws,
+  Fn,
+  Stack,
+  StackProps,
+  CfnParameter,
+  CfnCondition,
+  Duration,
+  CfnResource,
+  RemovalPolicy,
+  aws_iam as iam,
+  aws_dynamodb as ddb,
+  aws_sns as sns,
+  aws_kms as kms,
+  aws_stepfunctions as sfn,
+  aws_stepfunctions_tasks as tasks,
+  aws_lambda as lambda,
+  aws_ecs as ecs,
+  aws_ec2 as ec2,
+  aws_ssm as ssm,
+  aws_sns_subscriptions as subscriptions,
+  aws_events as events,
+  aws_events_targets as targets,
+  aws_secretsmanager as secretsmanager,
+  aws_logs as logs,
+  custom_resources as cr
+} from 'aws-cdk-lib';
+import { NagSuppressions } from "cdk-nag";
+
 import * as path from 'path';
 
 const { VERSION } = process.env;
@@ -45,7 +59,7 @@ interface CfnNagSuppressRule {
 }
 
 
-export function addCfnNagSuppressRules(resource: cdk.CfnResource, rules: CfnNagSuppressRule[]) {
+export function addCfnNagSuppressRules(resource: CfnResource, rules: CfnNagSuppressRule[]) {
   resource.addMetadata('cfn_nag', {
     rules_to_suppress: rules
   });
@@ -54,7 +68,7 @@ export function addCfnNagSuppressRules(resource: cdk.CfnResource, rules: CfnNagS
 /***
  * Main Stack
  */
-export class DataTransferECRStack extends cdk.Stack {
+export class DataTransferECRStack extends Stack {
   private paramGroups: any[] = [];
   private paramLabels: any = {};
 
@@ -73,12 +87,12 @@ export class DataTransferECRStack extends cdk.Stack {
   }
 
 
-  constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
     // The code that defines your stack goes here
 
-    const sourceType = new cdk.CfnParameter(this, 'sourceType', {
+    const sourceType = new CfnParameter(this, 'sourceType', {
       description: 'Choose type of source container registry, for example Amazon_ECR, or Public from Docker Hub, gco.io, etc.',
       type: 'String',
       default: 'Amazon_ECR',
@@ -87,7 +101,7 @@ export class DataTransferECRStack extends cdk.Stack {
     this.addToParamLabels('Source Type', sourceType.logicalId)
 
     // Only required for ECR
-    const srcRegion = new cdk.CfnParameter(this, 'srcRegion', {
+    const srcRegion = new CfnParameter(this, 'srcRegion', {
       description: 'Source Region Name (only required if source type is Amazon ECR), for example, us-west-1',
       type: 'String',
       default: '',
@@ -95,14 +109,14 @@ export class DataTransferECRStack extends cdk.Stack {
     this.addToParamLabels('Source Region Name', srcRegion.logicalId)
 
     // Only required for ECR
-    const srcAccountId = new cdk.CfnParameter(this, 'srcAccountId', {
+    const srcAccountId = new CfnParameter(this, 'srcAccountId', {
       description: 'Source AWS Account ID (only required if source type is Amazon ECR), leave it blank if source is in current account',
       type: 'String',
       default: '',
     })
     this.addToParamLabels('Source AWS Account ID', srcAccountId.logicalId)
     //
-    const srcList = new cdk.CfnParameter(this, 'srcList', {
+    const srcList = new CfnParameter(this, 'srcList', {
       description: 'Type of Source Image List, either ALL or SELECTED, for public registry, please use SELECTED only',
       type: 'String',
       default: 'ALL',
@@ -110,15 +124,15 @@ export class DataTransferECRStack extends cdk.Stack {
     })
     this.addToParamLabels('Source Image List Type', srcList.logicalId)
 
-    const srcImageList = new cdk.CfnParameter(this, 'srcImageList', {
-      description: 'Selected Image List delimited by comma, for example, ubuntu:latest,alpine:latest..., leave it blank if Type is ALL',
+    const srcImageList = new CfnParameter(this, 'srcImageList', {
+      description: 'Selected Image List delimited by comma, for example, ubuntu:latest,alpine:latest..., leave it blank if Type is ALL. For ECR source, using ALL_TAGS tag to get all tags.',
       type: 'String',
       default: '',
     })
     this.addToParamLabels('Source Image List', srcImageList.logicalId)
 
     // Currently, only required if source type is ECR
-    const srcCredential = new cdk.CfnParameter(this, 'srcCredential', {
+    const srcCredential = new CfnParameter(this, 'srcCredential', {
       description: 'The secret name in Secrets Manager only when using AK/SK credentials to pull images from source Amazon ECR, leave it blank for public registry',
       type: 'String',
       default: '',
@@ -126,58 +140,58 @@ export class DataTransferECRStack extends cdk.Stack {
     this.addToParamLabels('Source Credentials', srcCredential.logicalId)
 
 
-    const destRegion = new cdk.CfnParameter(this, 'destRegion', {
+    const destRegion = new CfnParameter(this, 'destRegion', {
       description: 'Destination Region Name, for example, cn-north-1',
       type: 'String',
     })
     this.addToParamLabels('Destination Region Name', destRegion.logicalId)
 
-    const destAccountId = new cdk.CfnParameter(this, 'destAccountId', {
+    const destAccountId = new CfnParameter(this, 'destAccountId', {
       description: 'Destination AWS Account ID, leave it blank if destination is in current account',
       type: 'String',
       default: '',
     })
     this.addToParamLabels('Destination AWS Account ID', destAccountId.logicalId)
 
-    const destPrefix = new cdk.CfnParameter(this, 'destPrefix', {
+    const destPrefix = new CfnParameter(this, 'destPrefix', {
       description: 'Destination Repo Prefix',
       type: 'String',
       default: '',
     })
     this.addToParamLabels('Destination Repo Prefix', destPrefix.logicalId)
 
-    const destCredential = new cdk.CfnParameter(this, 'destCredential', {
+    const destCredential = new CfnParameter(this, 'destCredential', {
       description: 'The secret name in Secrets Manager only when using AK/SK credentials to push images to destination Amazon ECR',
       type: 'String',
       default: '',
     })
     this.addToParamLabels('Destination Credentials', destCredential.logicalId)
 
-    const ecsClusterName = new cdk.CfnParameter(this, 'ecsClusterName', {
+    const ecsClusterName = new CfnParameter(this, 'ecsClusterName', {
       description: 'ECS Cluster Name to run ECS task (Please make sure the cluster exists)',
       type: 'String'
     })
     this.addToParamLabels('ECS Cluster Name', ecsClusterName.logicalId)
 
-    const ecsVpcId = new cdk.CfnParameter(this, 'ecsVpcId', {
+    const ecsVpcId = new CfnParameter(this, 'ecsVpcId', {
       description: 'VPC ID to run ECS task, e.g. vpc-bef13dc7',
       type: 'AWS::EC2::VPC::Id'
     })
     this.addToParamLabels('VPC ID', ecsVpcId.logicalId)
 
-    const ecsSubnetA = new cdk.CfnParameter(this, 'ecsSubnetA', {
+    const ecsSubnetA = new CfnParameter(this, 'ecsSubnetA', {
       description: 'First Subnet ID to run ECS task, e.g. subnet-97bfc4cd',
       type: 'AWS::EC2::Subnet::Id'
     })
     this.addToParamLabels('First Subnet ID', ecsSubnetA.logicalId)
 
-    const ecsSubnetB = new cdk.CfnParameter(this, 'ecsSubnetB', {
+    const ecsSubnetB = new CfnParameter(this, 'ecsSubnetB', {
       description: 'Second Subnet ID to run ECS task, e.g. subnet-7ad7de32',
       type: 'AWS::EC2::Subnet::Id'
     })
     this.addToParamLabels('Second Subnet ID', ecsSubnetB.logicalId)
 
-    const alarmEmail = new cdk.CfnParameter(this, 'alarmEmail', {
+    const alarmEmail = new CfnParameter(this, 'alarmEmail', {
       description: 'Alarm Email address to receive notification in case of any failure',
       // default: '',
       allowedPattern: '\\w[-\\w.+]*@([A-Za-z0-9][-A-Za-z0-9]+\\.)+[A-Za-z]{2,14}',
@@ -200,31 +214,31 @@ export class DataTransferECRStack extends cdk.Stack {
       }
     }
 
-    const isSelectedImage = new cdk.CfnCondition(this, 'isSelectedImage', {
-      expression: cdk.Fn.conditionEquals('SELECTED', srcList),
+    const isSelectedImage = new CfnCondition(this, 'isSelectedImage', {
+      expression: Fn.conditionEquals('SELECTED', srcList),
     });
 
 
-    const isSrcInCurrentAccount = new cdk.CfnCondition(this, 'isSrcInCurrentAccount', {
-      expression: cdk.Fn.conditionAnd(
+    const isSrcInCurrentAccount = new CfnCondition(this, 'isSrcInCurrentAccount', {
+      expression: Fn.conditionAnd(
         // Source Account ID is blank
-        cdk.Fn.conditionEquals('', srcAccountId),
+        Fn.conditionEquals('', srcAccountId),
         // Source Type is Amazon ECR
-        cdk.Fn.conditionEquals('Amazon_ECR', sourceType)),
+        Fn.conditionEquals('Amazon_ECR', sourceType)),
 
     });
 
-    const isDestInCurrentAccount = new cdk.CfnCondition(this, 'isDestInCurrentAccount', {
+    const isDestInCurrentAccount = new CfnCondition(this, 'isDestInCurrentAccount', {
       // Destination in Current Account
-      expression: cdk.Fn.conditionEquals('', destAccountId),
+      expression: Fn.conditionEquals('', destAccountId),
     });
 
-    const selectedImages = cdk.Fn.conditionIf(isSelectedImage.logicalId, srcImageList.valueAsString, 'Not Applicable').toString();
+    const selectedImages = Fn.conditionIf(isSelectedImage.logicalId, srcImageList.valueAsString, 'Not Applicable').toString();
 
 
     // Set up SSM for selected image list
     const selectedImageParam = new ssm.StringParameter(this, 'selectedImageParam', {
-      description: `Parameter to store the selected image list delimited by comma for stack ${cdk.Aws.STACK_NAME}`,
+      description: `Parameter to store the selected image list delimited by comma for stack ${Aws.STACK_NAME}`,
       // parameterName: 'SelectedImageList',
       stringValue: selectedImages,
     });
@@ -235,7 +249,7 @@ export class DataTransferECRStack extends cdk.Stack {
       partitionKey: { name: 'Image', type: ddb.AttributeType.STRING },
       sortKey: { name: 'Tag', type: ddb.AttributeType.STRING },
       billingMode: ddb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: RemovalPolicy.DESTROY,
       pointInTimeRecovery: true,
     })
 
@@ -248,12 +262,13 @@ export class DataTransferECRStack extends cdk.Stack {
     ])
 
     const listImagesLambda = new lambda.Function(this, 'ListImagesFunction', {
-      runtime: lambda.Runtime.NODEJS_12_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda')),
+      code: lambda.AssetCode.fromAsset(path.join(__dirname, '../lambda/ecr_helper'), {
+      }),
+      runtime: lambda.Runtime.PYTHON_3_9,
+      handler: 'lambda_function.lambda_handler',
       memorySize: 256,
-      timeout: cdk.Duration.minutes(15),
-      // tracing: lambda.Tracing.ACTIVE,
+      timeout: Duration.minutes(15),
+      description: 'Data Transfer Hub ECR Plugin - List Image Handler',
       environment: {
         SOURCE_TYPE: sourceType.valueAsString,
         SRC_ACCOUNT_ID: srcAccountId.valueAsString,
@@ -274,7 +289,7 @@ export class DataTransferECRStack extends cdk.Stack {
           "ecr:DescribeImages",
         ],
         resources: [
-          `arn:${cdk.Aws.PARTITION}:ecr:${srcRegion.valueAsString}:${cdk.Aws.ACCOUNT_ID}:repository/*`
+          `arn:${Aws.PARTITION}:ecr:${srcRegion.valueAsString}:${Aws.ACCOUNT_ID}:repository/*`
         ]
       })
     );
@@ -284,7 +299,7 @@ export class DataTransferECRStack extends cdk.Stack {
 
     const vpc = ec2.Vpc.fromVpcAttributes(this, 'ECSVpc', {
       vpcId: ecsVpcId.valueAsString,
-      availabilityZones: cdk.Fn.getAzs(),
+      availabilityZones: Fn.getAzs(),
       publicSubnetIds: [ecsSubnetA.valueAsString, ecsSubnetB.valueAsString]
     })
 
@@ -311,7 +326,7 @@ export class DataTransferECRStack extends cdk.Stack {
     });
 
     const taskExecutionPolicy = new iam.Policy(this, 'TaskExecutionPolicy', {
-      policyName: `${cdk.Aws.STACK_NAME}TaskExecutionPolicy`,
+      policyName: `${Aws.STACK_NAME}TaskExecutionPolicy`,
       statements: [
         new iam.PolicyStatement({
           actions: [
@@ -331,15 +346,15 @@ export class DataTransferECRStack extends cdk.Stack {
       memoryMiB: '1024',
       cpu: '512',
       compatibility: ecs.Compatibility.FARGATE,
-      family: `${cdk.Aws.STACK_NAME}-ECRTransferTask`,
+      family: `${Aws.STACK_NAME}-ECRTransferTask`,
       executionRole: ecsTaskExecutionRole.withoutPolicyUpdates()
     });
     srcSecretParam.grantRead(taskDefinition.taskRole);
     desSecretParam.grantRead(taskDefinition.taskRole);
 
-    const ecrRegistry = process.env.PUBLIC_ECR_REGISTRY || 'public.ecr.aws/aws-gcr-solutions'
+    const ecrRegistry = 'public.ecr.aws/aws-gcr-solutions'
     const ecrImageName = 'data-transfer-hub-ecr'
-    const ecrImageTag = process.env.PUBLIC_ECR_TAG || VERSION
+    const ecrImageTag = VERSION
 
     const ecrImageUrl = `${ecrRegistry}/${ecrImageName}:${ecrImageTag}`
 
@@ -366,7 +381,7 @@ export class DataTransferECRStack extends cdk.Stack {
 
 
     const ecrSrcReadOnlyPolicy = new iam.Policy(this, 'ECRSrcReadOnlyPolicy', {
-      policyName: `${cdk.Aws.STACK_NAME}ECRSrcReadOnlyPolicy`,
+      policyName: `${Aws.STACK_NAME}ECRSrcReadOnlyPolicy`,
       statements: [
         new iam.PolicyStatement({
           actions: [
@@ -383,7 +398,7 @@ export class DataTransferECRStack extends cdk.Stack {
             "ecr:BatchGetImage",
           ],
           resources: [
-            `arn:${cdk.Aws.PARTITION}:ecr:${srcRegion.valueAsString}:${cdk.Aws.ACCOUNT_ID}:repository/*`
+            `arn:${Aws.PARTITION}:ecr:${srcRegion.valueAsString}:${Aws.ACCOUNT_ID}:repository/*`
 
           ]
         }),
@@ -404,7 +419,7 @@ export class DataTransferECRStack extends cdk.Stack {
     ecrSrcReadOnlyPolicy.attachToRole(taskDefinition.taskRole);
 
     const ecrDestWritePolicy = new iam.Policy(this, 'ECRDestWritePolicy', {
-      policyName: `${cdk.Aws.STACK_NAME}ECRDestWritePolicy`,
+      policyName: `${Aws.STACK_NAME}ECRDestWritePolicy`,
       statements: [
         new iam.PolicyStatement({
           actions: [
@@ -426,7 +441,7 @@ export class DataTransferECRStack extends cdk.Stack {
             "ecr:BatchGetImage",
           ],
           resources: [
-            `arn:${cdk.Aws.PARTITION}:ecr:${destRegion.valueAsString}:${cdk.Aws.ACCOUNT_ID}:repository/*`
+            `arn:${Aws.PARTITION}:ecr:${destRegion.valueAsString}:${Aws.ACCOUNT_ID}:repository/*`
 
           ]
         }),
@@ -453,7 +468,7 @@ export class DataTransferECRStack extends cdk.Stack {
 
     const clusterSG = new ec2.SecurityGroup(this, 'clusterSG', {
       allowAllOutbound: true,
-      description: `SG for ${cdk.Aws.STACK_NAME} Fargate Tasks`,
+      description: `SG for ${Aws.STACK_NAME} Fargate Tasks`,
       vpc: vpc,
     });
     const cfnclusterSG = clusterSG.node.defaultChild as ec2.CfnSecurityGroup
@@ -541,7 +556,7 @@ export class DataTransferECRStack extends cdk.Stack {
 
     const retryParam: sfn.RetryProps = {
       backoffRate: 2,
-      interval: cdk.Duration.seconds(60),
+      interval: Duration.seconds(60),
       maxAttempts: 3,
     }
 
@@ -552,14 +567,16 @@ export class DataTransferECRStack extends cdk.Stack {
 
     submitJob.next(map).next(endState)
 
-    const logGroup = new logs.LogGroup(this, `DTH-ECR-StepFunction-LogGroup`);
+    const logGroup = new logs.LogGroup(this, `DTH-ECR-StepFunction-LogGroup`,{
+      logGroupName: `/aws/vendedlogs/states/${Fn.select(6, Fn.split(":", listImagesLambda.functionArn))}-SM-log`
+    });
 
     // Create role for Step Machine
     const ecrStateMachineRole = new iam.Role(this, `DTH-ECR-ecrStateMachineRole`, {
       assumedBy: new iam.ServicePrincipal('states.amazonaws.com')
     });
 
-    const taskDefArnNoVersion = cdk.Stack.of(this).formatArn({
+    const taskDefArnNoVersion = Stack.of(this).formatArn({
       service: 'ecs',
       resource: 'task-definition',
       resourceName: taskDefinition.family
@@ -625,7 +642,7 @@ export class DataTransferECRStack extends cdk.Stack {
           "events:DescribeRule"
         ],
         resources: [
-          `arn:${cdk.Aws.PARTITION}:events:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:rule/StepFunctionsGetEventsForECSTaskRule`,
+          `arn:${Aws.PARTITION}:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:rule/StepFunctionsGetEventsForECSTaskRule`,
         ]
       }),
       new iam.PolicyStatement({
@@ -659,7 +676,7 @@ export class DataTransferECRStack extends cdk.Stack {
     ])
 
     const ecrStateMachine = new sfn.StateMachine(this, 'ECRReplicationStateMachine', {
-      stateMachineName: `${cdk.Aws.STACK_NAME}-ECRReplicationSM`,
+      stateMachineName: `${Aws.STACK_NAME}-ECRReplicationSM`,
       role: ecrStateMachineRole.withoutPolicyUpdates(),
       definition: submitJob,
       logs: {
@@ -690,15 +707,15 @@ export class DataTransferECRStack extends cdk.Stack {
       ]
     }))
 
-    const ecrStateMachineTarget = new SfnStateMachine(ecrStateMachine, { role: smRuleRole });
-    const smRule = new Rule(this, 'ECRReplicationScheduleRule', {
-      schedule: Schedule.rate(cdk.Duration.days(1)),
+    const ecrStateMachineTarget = new targets.SfnStateMachine(ecrStateMachine, { role: smRuleRole });
+    const smRule = new events.Rule(this, 'ECRReplicationScheduleRule', {
+      schedule: events.Schedule.rate(Duration.days(1)),
       targets: [ecrStateMachineTarget],
     });
     smRule.node.addDependency(ecrStateMachine, smRuleRole)
 
     const checkExecutionLambdaPolicy = new iam.Policy(this, 'CheckExecutionLambdaPolicy', {
-      policyName: `${cdk.Aws.STACK_NAME}CheckExecutionLambdaPolicy`,
+      policyName: `${Aws.STACK_NAME}CheckExecutionLambdaPolicy`,
       statements: [
         new iam.PolicyStatement({
           actions: [
@@ -732,11 +749,11 @@ export class DataTransferECRStack extends cdk.Stack {
     })
 
     const checkExecutionLambda = new lambda.Function(this, 'CheckExecutionFunction', {
-      runtime: lambda.Runtime.NODEJS_12_X,
+      runtime: lambda.Runtime.NODEJS_16_X,
       handler: 'step-func.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda')),
       memorySize: 256,
-      timeout: cdk.Duration.minutes(15),
+      timeout: Duration.minutes(15),
       // tracing: lambda.Tracing.ACTIVE,
       environment: {
         STATE_MACHINE_ARN: ecrStateMachine.stateMachineArn
@@ -756,7 +773,7 @@ export class DataTransferECRStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         resources: [checkExecutionLambda.functionArn]
       })]),
-      timeout: cdk.Duration.minutes(15),
+      timeout: Duration.minutes(15),
       onCreate: {
         service: 'Lambda',
         action: 'invoke',

@@ -37,11 +37,13 @@ fs.readdirSync(global_s3_assets).forEach(file => {
     const fn = template.Resources[f];
     if (fn.Properties.Code.hasOwnProperty('S3Bucket')) {
       // Set the S3 key reference
-      let artifactHash = Object.assign(fn.Properties.Code.S3Bucket.Ref);
-      artifactHash = artifactHash.replace('AssetParameters', '');
-      artifactHash = artifactHash.substring(0, artifactHash.indexOf('S3Bucket'));
-      const assetPath = `asset${artifactHash}`;
-      fn.Properties.Code.S3Key = `%%SOLUTION_NAME%%/%%VERSION%%/${assetPath}.zip`;
+      let s3Key = Object.assign(fn.Properties.Code.S3Key);
+      // https://github.com/aws/aws-cdk/issues/10608
+      if (!s3Key.endsWith('.zip')) {
+        fn.Properties.Code.S3Key = `%%SOLUTION_NAME%%/%%VERSION%%/${s3Key}.zip`;
+      } else {
+        fn.Properties.Code.S3Key = `%%SOLUTION_NAME%%/%%VERSION%%/${s3Key}`;
+      }
       // Set the S3 bucket reference
       fn.Properties.Code.S3Bucket = {
         'Fn::Sub': '%%BUCKET_NAME%%-${AWS::Region}'
@@ -80,6 +82,17 @@ fs.readdirSync(global_s3_assets).forEach(file => {
   assetParameters.forEach(function (a) {
     template.Parameters[a] = undefined;
   });
+
+  // Clean-up BootstrapVersion parameter
+  if (parameters.hasOwnProperty('BootstrapVersion')) {
+    parameters.BootstrapVersion = undefined
+  }
+
+  // Clean-up CheckBootstrapVersion Rule
+  const rules = (template.Rules) ? template.Rules : {};
+  if (rules.hasOwnProperty('CheckBootstrapVersion')) {
+    rules.CheckBootstrapVersion = undefined
+  }
 
   // Output modified template file
   const output_template = JSON.stringify(template, null, 2);

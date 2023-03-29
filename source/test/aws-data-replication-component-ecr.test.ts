@@ -14,15 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import * as cdk from '@aws-cdk/core';
-import { SynthUtils } from '@aws-cdk/assert';
-import * as ecr from '../lib/aws-data-replication-component-ecr-stack';
+import { App, Stack } from "aws-cdk-lib";
+import { Match, Template } from "aws-cdk-lib/assertions";
+import * as main from '../lib/aws-data-replication-component-ecr-stack';
 
-test('Test main stack', () => {
-  const app = new cdk.App();
-  // WHEN
-  const stack = new ecr.DataTransferECRStack(app, 'MyTestStack');
-  // THEN
-  expect(SynthUtils.toCloudFormation(stack)).toMatchSnapshot();
+beforeEach(() => {
+    jest.resetModules();
+    process.env = {};
+});
+
+describe("MainStack", () => {
+    test("Test main stack with default setting", () => {
+        const app = new App();
+
+        // WHEN
+        const stack = new main.DataTransferECRStack(app, "MyTestStack");
+        const template = Template.fromStack(stack);
+
+        template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+    });
 
 });

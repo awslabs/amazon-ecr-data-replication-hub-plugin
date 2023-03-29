@@ -26,8 +26,33 @@
 #  - solution-name: name of the solution for consistency
 #  - version-code: version of the package
 
+do_cmd() 
+{
+    echo "------ EXEC $*"
+    $*
+    rc=$?
+    if [ $rc -gt 0 ]
+    then
+            echo "Aborted - rc=$rc"
+            exit $rc
+    fi
+}
+
 # Important: CDK global version number
 # cdk_version=1.74.0
+cleanup_temporary_generted_files()
+{
+    echo "------------------------------------------------------------------------------"
+    echo "${bold}[Cleanup] Remove temporary files${normal}"
+    echo "------------------------------------------------------------------------------"
+
+    # Delete generated files: CDK Consctruct typescript transcompiled generted files
+    do_cmd cd $source_dir
+    do_cmd npm run cleanup:tsc
+
+    # Delete the temporary /staging folder
+    do_cmd rm -rf $staging_dist_dir
+}
 
 # Check to see if the required parameters have been provided:
 if [ -z "$1" ] || [ -z "$2" ]; then
@@ -35,10 +60,10 @@ if [ -z "$1" ] || [ -z "$2" ]; then
     echo "For example: ./build-s3-dist.sh solutions trademarked-solution-name v1.0.0"
     exit 1
 fi
-if [ -z "$3" ]; then
-    export VERSION=$(git describe --tags || echo latest)
+if [ ! -z $3 ]; then
+    export VERSION="$3"
 else
-    export VERSION=$3
+    export VERSION=$(git describe --tags --exact-match || { [ -n "$BRANCH_NAME" ] && echo "$BRANCH_NAME"; } || echo v0.0.0)
 fi
 
 # Get reference for all important folders
@@ -165,23 +190,41 @@ for d in `find . -mindepth 1 -maxdepth 1 -type d`; do
     # cd $d
     # Rename the artifact, removing the period for handler compatibility
     pfname="$(basename -- $d)"
-    fname="$(echo $pfname | sed -e 's/\.//g')"
-    echo "zipping the artifact"
-    mv $d $fname
-    pushd $fname
-    echo "zip -qr9 $staging_dist_dir/$fname.zip ."
-    zip -qr9 $staging_dist_dir/$fname.zip .
-    popd
-
-    # Copy the zipped artifact from /staging to /regional-s3-assets
-    echo "mv $fname.zip $build_dist_dir"
-    mv $fname.zip $build_dist_dir
+    # zip folder
+    echo "zip -rq $pfname.zip $pfname"
+    cd $pfname
+    zip -rq $pfname.zip *
+    mv $pfname.zip ../
+    cd ..
 
     # Remove the old, unzipped artifact from /staging
-    echo "rm -rf $fname"
-    rm -rf $fname
+    echo "rm -rf $pfname"
+    rm -rf $pfname
 
+    # ... repeat until all source code artifacts are zipped and placed in the /staging
 done
+
+
+# ... For each asset.*.zip code artifact in the temporary /staging folder...
+cd $staging_dist_dir
+for f in `find . -iname \*.zip`; do
+    # Rename the artifact, removing the period for handler compatibility
+    # pfname = asset.<key-name>.zip
+    pfname="$(basename -- $f)"
+    echo $pfname
+    # fname = <key-name>.zip
+    fname="$(echo $pfname | sed -e 's/asset\.//g')"
+    mv $pfname $fname
+
+    # Copy the zipped artifact from /staging to /regional-s3-assets
+    echo "cp $fname $build_dist_dir"
+    cp $fname $build_dist_dir
+
+    # Remove the old, zipped artifact from /staging
+    echo "rm $fname"
+    rm $fname
+done
+
 
 echo "------------------------------------------------------------------------------"
 echo "[Cleanup] Remove temporary files"
@@ -190,3 +233,6 @@ echo "--------------------------------------------------------------------------
 # Delete the temporary /staging folder
 echo "rm -rf $staging_dist_dir"
 rm -rf $staging_dist_dir
+
+# cleanup temporary generated files that are not needed for later stages of the build pipeline
+cleanup_temporary_generted_files

@@ -26,8 +26,9 @@ setup_python_env() {
 
     echo "Installing python packages"
     # install test dependencies in the python virtual environment
-	pip3 install -r requirements-test.txt
-	pip3 install -r requirements.txt --target .
+	pip install --upgrade pip
+	pip3 install -r test/requirements-test.txt
+	# pip3 install -r requirements.txt --target .
 
 	echo "deactivate virtual environment"
 	deactivate
@@ -57,7 +58,7 @@ run_python_test() {
 	echo "coverage report path set to $coverage_report_path"
 
 	# Use -vv for debugging
-	python3 -m pytest --cov --cov-report=term-missing --cov-report "xml:$coverage_report_path"
+	python3 -m pytest -s --cov --cov-report=term-missing --cov-report "xml:$coverage_report_path"
 
     # The pytest --cov with its parameters and .coveragerc generates a xml cov-report with `coverage/sources` list
     # with absolute path for the source directories. To avoid dependencies of tools (such as SonarQube) on different
@@ -142,10 +143,11 @@ source_dir="$(pwd -P)"
 coverage_reports_top_path=$source_dir/test/coverage-reports
 
 # Test the CDK project
-run_cdk_project_test $source_dir
+construct_dir=$source_dir
+run_cdk_project_test $construct_dir
 
 # Test the attached Lambda function
-# run_javascript_test $source_dir/lambda/example-function-js example-function-js
+run_python_test $construct_dir/lambda/ecr_helper ecr_helper
 
 # Return to the source/ level
 cd $source_dir

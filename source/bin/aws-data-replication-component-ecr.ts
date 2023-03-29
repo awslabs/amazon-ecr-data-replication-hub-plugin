@@ -18,8 +18,33 @@ limitations under the License.
 
 
 import 'source-map-support/register';
-import * as cdk from '@aws-cdk/core';
 import { DataTransferECRStack } from '../lib/aws-data-replication-component-ecr-stack';
+import { App, Aspects, Stack } from "aws-cdk-lib";
 
-const app = new cdk.App();
-new DataTransferECRStack(app, 'DataTransferECRStack');
+import {
+    AwsSolutionsChecks,
+    NagPackSuppression,
+    NagSuppressions,
+} from "cdk-nag";
+
+const app = new App();
+
+function stackSuppressions(
+    stacks: Stack[],
+    suppressions: NagPackSuppression[]
+) {
+    stacks.forEach((s) =>
+        NagSuppressions.addStackSuppressions(s, suppressions, true)
+    );
+}
+
+stackSuppressions([
+    new DataTransferECRStack(app, 'DataTransferECRStack'),
+], [
+    { id: 'AwsSolutions-IAM5', reason: 'some policies need to get dynamic resources' },
+    { id: 'AwsSolutions-IAM4', reason: 'these policies is used by CDK Customer Resource lambda' },
+    { id: 'AwsSolutions-L1', reason: 'not applicable to use the latest lambda runtime version' },
+    { id: "AwsSolutions-ECS2", reason: "We need to create a dynamic ECS Service" },
+]);
+
+Aspects.of(app).add(new AwsSolutionsChecks());
