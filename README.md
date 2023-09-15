@@ -1,6 +1,21 @@
 
 [中文](./README_CN.md)
 
+# Repository Has Been Migrated
+
+This repository has been merged into [Data Transfer Hub](https://github.com/awslabs/data-transfer-hub/blob/main/docs/ECR_PLUGIN.md). Subsequent maintenance and updates for this repository will be conducted within repository [Data Transfer Hub](https://github.com/awslabs/data-transfer-hub).
+
+The document of this repository has been migrated to: 
+- MD: https://github.com/awslabs/data-transfer-hub/blob/main/docs/ECR_PLUGIN.md
+- Mkdoc: https://awslabs.github.io/data-transfer-hub/en/user-guide/tutorial-ecr/
+
+The code of this repository has been migrated to:
+- Infra CDK: https://github.com/awslabs/data-transfer-hub/tree/main/source/constructs/lib/ecr-plugin
+- Lambda: https://github.com/awslabs/data-transfer-hub/tree/main/source/constructs/lambda/plugin/ecr
+- Dockerfile: https://github.com/awslabs/data-transfer-hub/tree/main/source/constructs/ecr
+
+This migration will not impact any existing functionalities of the ECR plugin, and the ECR plugin can still be deployed independently.
+
 # Data Transfer Hub - ECR Plugin
 
 ## Table of contents
